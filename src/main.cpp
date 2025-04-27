@@ -1,19 +1,25 @@
 // by 11227205 資訊二乙 劉至嘉 & 11027214 楊碕萍.
+#include <string.h>
+
 #include <algorithm>
 #include <cassert>
 #include <charconv>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <expected>
 #include <format>
 #include <fstream>
 #include <iostream>
-#include <istream>
 #include <print>
 #include <ranges>
-#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
+// anonymous namespace to force internal linkage
+// I would like to move these into a header file if possible
+namespace {
 // inspired (copied) from absl::StatusCode
 // go to https://abseil.io/docs/cpp/guides/status-codes for documentation
 enum struct StatusCode : int {
@@ -36,13 +42,17 @@ enum struct StatusCode : int {
   kUnauthenticated = 16,
 };
 
+constexpr std::string_view kPrompt =
+    "******* Hash Table *****\n"
+    "* 0. QUIT              *\n"
+    "* 1. Linear probing   *\n"
+    "* 2. Double hashing    *\n"
+    "************************\n"
+    "Input a choice(0, 1, 2): ";
+
 constexpr std::string_view kInputPrefix = "input";
 constexpr std::string_view kInputSuffix = ".txt";
 constexpr std::string_view kCancelString = "input0.txt";
-
-constexpr std::string_view kPrompt = "";
-
-namespace utils {
 
 constexpr std::vector<std::string_view> StrSplit(std::string_view string,
                                                  std::string_view delimiter) {
@@ -53,22 +63,16 @@ constexpr std::vector<std::string_view> StrSplit(std::string_view string,
 constexpr std::string_view StrSplitAt(std::string_view line,
                                       std::string_view delimiter,
                                       const int at) {
+  assert(at >= 0);
   auto tokens = line | std::views::split(delimiter);
   return std::string_view{*std::ranges::next(tokens.begin(), at)};
 }
 
-constexpr int StrToInt(std::string_view str) noexcept {
-  int value = 0;
+template <typename T>
+constexpr T StrTo(std::string_view str) noexcept {
+  T value = 0;
   std::from_chars(str.data(), str.data() + str.size(), value);
   return value;
-}
-
-constexpr void EraseCommaAndQuotation(std::string& s) {
-  for (auto it = s.begin(); it != s.end(); ++it) {
-    if (*it == ',' || *it == '\"') {
-      s.erase(it);
-    }
-  }
 }
 
 template <typename T>
@@ -87,76 +91,31 @@ std::expected<T, StatusCode> Scan(std::string_view prompt) noexcept {
   return Scan<T>();
 }
 
-}  // namespace utils
+struct Info {
+  Info() = default;
+  explicit Info(std::string_view line)
+      : scores{StrTo<uint8_t>(StrSplitAt(line, "\t", 2)),
+               StrTo<uint8_t>(StrSplitAt(line, "\t", 3)),
+               StrTo<uint8_t>(StrSplitAt(line, "\t", 4)),
+               StrTo<uint8_t>(StrSplitAt(line, "\t", 5)),
+               StrTo<uint8_t>(StrSplitAt(line, "\t", 6)),
+               StrTo<uint8_t>(StrSplitAt(line, "\t", 7))},
+        score_average{StrTo<float>(StrSplitAt(line, "\t", 8))} {
+    auto name = (StrSplitAt(line, "\t", 1));
+    for (size_t i = 0; i < name.size(); ++i) {
+      student_name[i] = name[i];
+    }
 
-namespace graduate {
-
-class Info {
- public:
-  static constexpr std::string_view kDelimiter = "\t";
-  enum StrSplitTable : size_t {
-    kSchoolId = 0,
-    kSchoolName,
-    kDepartmentId,
-    kDepartmentName,
-    kDayOrNightType,
-    kLevel,
-    kStudentAmount,
-    kTeacherAmount,
-    kGraduateAmount,
-    kCityName,
-    kSchoolType
-  };
-
-  Info(std::string&& line, int serial_number) noexcept
-      : data_{std::move(line)} {
-    school_name_ = {utils::StrSplitAt(data_, kDelimiter, kSchoolName)};
-    department_name_ = {utils::StrSplitAt(data_, kDelimiter, kDepartmentName)};
-    day_or_night_type_ = {
-        utils::StrSplitAt(data_, kDelimiter, kDayOrNightType)};
-    level_ = {utils::StrSplitAt(data_, kDelimiter, kLevel)};
-    serial_number_ = {serial_number};
-    student_amount_ = {
-        utils::StrToInt(utils::StrSplitAt(data_, kDelimiter, kStudentAmount))};
-    graduate_amount_ = {
-        utils::StrToInt(utils::StrSplitAt(data_, kDelimiter, kGraduateAmount))};
+    auto id = StrSplitAt(line, "\t", 0);
+    for (size_t i = 0; i < name.size(); ++i) {
+      student_id[i] = id[i];
+    }
   }
 
-  Info(std::string_view line, int serial_number) : data_{line} {
-    school_name_ = {utils::StrSplitAt(data_, kDelimiter, kSchoolName)};
-    department_name_ = {utils::StrSplitAt(data_, kDelimiter, kDepartmentName)};
-    day_or_night_type_ = {
-        utils::StrSplitAt(data_, kDelimiter, kDayOrNightType)};
-    level_ = {utils::StrSplitAt(data_, kDelimiter, kLevel)};
-    serial_number_ = {serial_number};
-    student_amount_ = {
-        utils::StrToInt(utils::StrSplitAt(data_, kDelimiter, kStudentAmount))};
-    graduate_amount_ = {
-        utils::StrToInt(utils::StrSplitAt(data_, kDelimiter, kGraduateAmount))};
-  }
-
-  void Println() const {
-    std::println("[{}] {}, {}, {}, {}, {}, {}", serial_number_, school_name_,
-                 department_name_, day_or_night_type_, level_, student_amount_,
-                 graduate_amount_);
-  }
-
-  std::string_view school_name() const { return school_name_; }
-  std::string_view department_name() const { return department_name_; }
-  std::string_view day_or_night_type() const { return day_or_night_type_; }
-  std::string_view level() const { return level_; }
-
- private:
-  friend std::formatter<graduate::Info>;
-
-  std::string data_;
-  std::string_view school_name_;
-  std::string_view department_name_;
-  std::string_view day_or_night_type_;
-  std::string_view level_;
-  int serial_number_ = 0;
-  int student_amount_ = 0;
-  int graduate_amount_ = 0;
+  uint8_t scores[6]{};
+  char student_name[10]{};
+  char student_id[10]{};
+  float score_average{};
 };
 
 std::expected<std::vector<Info>, StatusCode> MakeList(
@@ -167,50 +126,23 @@ std::expected<std::vector<Info>, StatusCode> MakeList(
     return std::unexpected{StatusCode::kNotFound};
   }
 
-  auto skip_first_x_lines = [](std::istream& in, const int x) {
-    assert(x > 0);
-    for (int i = 0; i < x; i++) {
-      in.ignore(10000, '\n');
-    }
-  };
-
-  skip_first_x_lines(file, 3);
-
+  std::vector<Info> infos;
   std::string line;
-
-  std::vector<Info> data;
   while (std::getline(file, line)) {
-    data.emplace_back(std::move(line), data.size() + 1);
+    infos.emplace_back(line);
   }
 
-  return data;
+  return infos;
 }
 
-}  // namespace graduate
-
-template <>
-struct std::formatter<graduate::Info> : std::formatter<std::string> {
-  auto format(const graduate::Info& val, std::format_context& context) const {
-    return std::format_to(
-        context.out(), "[{}] {}, {}, {}, {}, {}, {}", val.serial_number_,
-        val.school_name_, val.department_name_, val.day_or_night_type_,
-        val.level_, val.student_amount_, val.graduate_amount_);
-  }
-};
+}  // namespace
 
 int main() {
-  if (auto file_number = utils::Scan<std::string>("Enter file number: ");
-      file_number.has_value()) [[likely]] {
-    if (file_number.value() == "0") {
-      return 0;
-    }
-    std::string file_name = std::format(
-        "{}{}{}", kInputPrefix, std::move(file_number.value()), kInputSuffix);
-    auto file_content = graduate::MakeList(file_name);
-    if (file_content) {
-      for (const auto& i : file_content.value()) {
-        std::println("{}", i);
-      }
-    }
+  auto input = Scan<std::string>(kPrompt);
+  if (input.has_value()) {
+    auto infos = MakeList(std::format("input{}.txt", input.value()));
+    std::ranges::for_each(infos.value(), [](const Info& i) {
+      std::println("{}\t{}\t{}", i.student_id, i.student_name, i.score_average);
+    });
   }
 }
